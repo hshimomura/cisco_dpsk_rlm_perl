@@ -42,6 +42,25 @@ In practical terms:
 - EasyPSK is a WPA2-only compatibility feature and is not a fit for Wi-Fi 6E / 6 GHz.
 - This FreeRADIUS approach inherits the scaling limits of candidate-PSK search in `rlm_dpsk`.
 
+### A use case where EasyPSK can make sense
+
+One realistic fit for EasyPSK is a small apartment building, student dormitory, or similar residential environment where:
+
+- the operator wants one shared SSID for roaming simplicity
+- each room or tenant should be isolated at Layer 2
+- pre-registering every client MAC address is operationally unrealistic
+- mass onboarding events and frequent high-density reconnect storms are less common than in enterprise office WLANs
+
+In that kind of environment, using one PSK identity per room and mapping it to a room-specific VLAN can be operationally acceptable.
+
+However, the tradeoffs remain:
+
+- it is still WPA2-only
+- a room-level PSK is shared by everyone in that room
+- if that PSK leaks, the room-level secret must be rotated
+- user-level accountability is weaker than with per-device credentials
+- large numbers of room-specific PSKs still increase matching cost on the RADIUS side
+
 ## Why this exists
 
 Cisco Catalyst 9800 WLC EasyPSK requests include required material in Cisco VSAs:
