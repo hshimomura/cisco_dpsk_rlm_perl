@@ -164,15 +164,13 @@ perl_dpsk
 
 - `authorize {}`
   - `rewrite_called_station_id`
-  - `perl_dpsk`
-  - `dpsk`
-  - `if (ok || updated) { ... &Auth-Type := dpsk ... }`
+  - `if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) { perl_dpsk; dpsk; if (ok || updated) { ... &Auth-Type := dpsk ... } }`
 - `authenticate {}`
   - `Auth-Type dpsk { dpsk; if (updated || ok) { ok } }`
 - `post-auth {}`
-  - `perl_dpsk`
+  - `if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) { perl_dpsk }`
 - `Post-Auth-Type REJECT {}`
-  - `perl_dpsk`
+  - `if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) { perl_dpsk }`
 
 ### 1. Perl module 定義
 
@@ -188,7 +186,10 @@ perl perl_dpsk {
 
 ### 2. `sites-enabled/default` の `authorize {}`
 
-`rewrite_called_station_id` は残し、その後に `perl_dpsk`、さらに `dpsk` を呼びます。
+`rewrite_called_station_id` は残し、その後に EasyPSK の handshake 属性があるときだけ `perl_dpsk` と `dpsk` を呼びます。
+
+注記:
+この条件分岐を入れておくと、Cisco EasyPSK 用属性を持たない通常の MAB リクエストが `perl_dpsk` によって reject されるのを防げます。
 
 追加箇所が分かりやすいように、差分形式でも示します。
 
@@ -202,11 +203,13 @@ perl perl_dpsk {
  	digest
  
 + 	rewrite_called_station_id
-+	perl_dpsk
-+	dpsk
-+	if (ok || updated) {
-+		update control {
-+			&Auth-Type := dpsk
++	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++		perl_dpsk
++		dpsk
++		if (ok || updated) {
++			update control {
++				&Auth-Type := dpsk
++			}
 +		}
 +	}
  
@@ -229,11 +232,13 @@ authorize {
 	digest
 
 +	rewrite_called_station_id
-+	perl_dpsk
-+	dpsk
-+	if (ok || updated) {
-+		update control {
-+			&Auth-Type := dpsk
++	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++		perl_dpsk
++		dpsk
++		if (ok || updated) {
++			update control {
++				&Auth-Type := dpsk
++			}
 +		}
 +	}
 
@@ -278,14 +283,19 @@ authenticate {
 
 ### 4. `post-auth {}`
 
-成功時の `psk` / `psk-mode` / VLAN 返却のために `perl_dpsk` を呼びます。
+成功時の `psk` / `psk-mode` / VLAN 返却のために、EasyPSK のときだけ `perl_dpsk` を呼びます。
+
+注記:
+ここで `perl_dpsk` を無条件に呼ぶと、EasyPSK ではない Access-Accept に EasyPSK 専用属性や error-cause が混入することがあります。
 
 追加箇所:
 
 ```diff
  # sites-enabled/default
  post-auth {
-+	perl_dpsk
++	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++		perl_dpsk
++	}
  
  	if (&User-Name != "anonymous") {
  		sql
@@ -297,7 +307,9 @@ authenticate {
 
 ```diff
 post-auth {
-+	perl_dpsk
++	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++		perl_dpsk
++	}
 
 	if (&User-Name != "anonymous") {
 		sql
@@ -309,7 +321,10 @@ post-auth {
 
 ### 5. `Post-Auth-Type REJECT {}`
 
-reject 時の `cisco-easy-psk-error-cause` を返すため、ここでも `perl_dpsk` を呼びます。
+reject 時の `cisco-easy-psk-error-cause` を返すため、ここでも EasyPSK のときだけ `perl_dpsk` を呼びます。
+
+注記:
+これにより EasyPSK の reject 処理は維持しつつ、通常の MAB reject が EasyPSK failure として扱われるのを防げます。
 
 追加箇所:
 
@@ -320,7 +335,9 @@ reject 時の `cisco-easy-psk-error-cause` を返すため、ここでも `perl_
  	sql
  	attr_filter.access_reject
  	eap
-+	perl_dpsk
++	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++		perl_dpsk
++	}
  	remove_reply_message_if_eap
  }
 ```
@@ -331,7 +348,9 @@ Post-Auth-Type REJECT {
 	sql
 	attr_filter.access_reject
 	eap
-+	perl_dpsk
++	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++		perl_dpsk
++	}
 	remove_reply_message_if_eap
 }
 ```

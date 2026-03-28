@@ -157,15 +157,13 @@ Placed by section, this means:
 
 - `authorize {}`:
   - `rewrite_called_station_id`
-  - `perl_dpsk`
-  - `dpsk`
-  - `if (ok || updated) { ... &Auth-Type := dpsk ... }`
+  - `if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) { perl_dpsk; dpsk; if (ok || updated) { ... &Auth-Type := dpsk ... } }`
 - `authenticate {}`:
   - `Auth-Type dpsk { dpsk; if (updated || ok) { ok } }`
 - `post-auth {}`:
-  - `perl_dpsk`
+  - `if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) { perl_dpsk }`
 - `Post-Auth-Type REJECT {}`:
-  - `perl_dpsk`
+  - `if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) { perl_dpsk }`
 
 ### 1. Perl module definition
 
@@ -181,7 +179,10 @@ perl perl_dpsk {
 
 ### 2. `authorize {}` in `sites-enabled/default`
 
-Keep `rewrite_called_station_id`, then add `perl_dpsk`, then `dpsk`.
+Keep `rewrite_called_station_id`, then call `perl_dpsk` and `dpsk` only when the request contains EasyPSK handshake attributes.
+
+Note:
+The conditional call is recommended. Without it, ordinary MAB requests that do not carry Cisco EasyPSK handshake material can be rejected by the Perl helper.
 
 Highlighted additions:
 
@@ -195,11 +196,13 @@ Highlighted additions:
  	digest
  
 + 	rewrite_called_station_id
-+	perl_dpsk
-+	dpsk
-+	if (ok || updated) {
-+		update control {
-+			&Auth-Type := dpsk
++	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++		perl_dpsk
++		dpsk
++		if (ok || updated) {
++			update control {
++				&Auth-Type := dpsk
++			}
 +		}
 +	}
  
@@ -222,11 +225,13 @@ authorize {
 	digest
 
 +	rewrite_called_station_id
-+	perl_dpsk
-+	dpsk
-+	if (ok || updated) {
-+		update control {
-+			&Auth-Type := dpsk
++	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++		perl_dpsk
++		dpsk
++		if (ok || updated) {
++			update control {
++				&Auth-Type := dpsk
++			}
 +		}
 +	}
 
@@ -271,14 +276,19 @@ authenticate {
 
 ### 4. `post-auth {}`
 
-Call `perl_dpsk` so successful replies get Cisco EasyPSK attributes.
+Call `perl_dpsk` only for EasyPSK requests so successful EasyPSK replies get Cisco-specific attributes.
+
+Note:
+If `perl_dpsk` is called unconditionally here, non-EasyPSK Access-Accept replies can be polluted with EasyPSK-specific attributes or error codes.
 
 Highlighted additions:
 
 ```diff
  # sites-enabled/default
  post-auth {
-+	perl_dpsk
++	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++		perl_dpsk
++	}
  
  	if (&User-Name != "anonymous") {
  		sql
@@ -290,7 +300,9 @@ Highlighted additions:
 
 ```diff
 post-auth {
-+	perl_dpsk
++	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++		perl_dpsk
++	}
 
 	if (&User-Name != "anonymous") {
 		sql
@@ -302,7 +314,10 @@ post-auth {
 
 ### 5. `Post-Auth-Type REJECT {}`
 
-Call `perl_dpsk` here too so reject replies get `cisco-easy-psk-error-cause`.
+Call `perl_dpsk` here too, but only for EasyPSK requests, so EasyPSK rejects get `cisco-easy-psk-error-cause`.
+
+Note:
+This keeps EasyPSK reject handling available while preventing ordinary MAB rejects from being rewritten as EasyPSK failures.
 
 Highlighted additions:
 
@@ -313,7 +328,9 @@ Highlighted additions:
  	sql
  	attr_filter.access_reject
  	eap
-+	perl_dpsk
++	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++		perl_dpsk
++	}
  	remove_reply_message_if_eap
  }
 ```
@@ -324,7 +341,9 @@ Post-Auth-Type REJECT {
 	sql
 	attr_filter.access_reject
 	eap
-+	perl_dpsk
++	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++		perl_dpsk
++	}
 	remove_reply_message_if_eap
 }
 ```
