@@ -4,6 +4,8 @@ Perl helper module for Cisco EasyPSK on FreeRADIUS 3.2.x.
 
 As validated for this project, Cisco Identity Services Engine (ISE) 3.5 Patch 2 did not provide the EasyPSK behavior required here, so extending FreeRADIUS was necessary.
 
+Cisco's Catalyst 9800 Easy PSK feature history states that EasyPSK was introduced in Cisco IOS XE Bengaluru 17.5.1 as an Early Field Trial feature.[^3]
+
 This project complements `rlm_dpsk` by:
 
 - extracting Cisco EasyPSK request parameters from `Cisco-AVPair`
@@ -80,6 +82,11 @@ The interoperability checks described in this repository were performed with the
 
 - Cisco Catalyst 9800 Wireless LAN Controller
 - Version `17.18.2`
+
+Feature introduction note:
+
+- Cisco documents EasyPSK on Catalyst 9800 as first introduced in Cisco IOS XE Bengaluru `17.5.1`
+- The 17.5.x release notes were first published on March 31, 2021, so EasyPSK support on Catalyst 9800 dates back to at least that release documentation window[^3][^4]
 
 Path note:
 
@@ -521,6 +528,9 @@ References:
 - `radpostauth_pkey` duplicate errors are unrelated to EasyPSK itself.
 - This repository is published under the MIT License to keep reuse simple for GitHub distribution.
 - Cisco ISE support should be rechecked for future releases, but this repository documents the behavior validated against ISE 3.5 Patch 2 at the time of writing.
+
+[^3]: Cisco Catalyst 9800 Easy PSK feature history: Cisco IOS XE Bengaluru 17.5.1, released as an Early Field Trial feature. https://www.cisco.com/c/en/us/td/docs/wireless/controller/9800/17-6/config-guide/b_wl_17_6_cg/m_epsk.html
+[^4]: Cisco Catalyst 9800 Cisco IOS XE Bengaluru 17.5.x release notes, first published March 31, 2021. https://www.cisco.com/c/en/us/td/docs/wireless/controller/9800/17-5/release-notes/rn-17-5-9800.html
 
 ## iPSK vs EasyPSK
 
