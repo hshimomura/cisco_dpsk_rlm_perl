@@ -404,6 +404,14 @@ identity,psk[,mac]
 
 このヘルパーでは `identity` の元の意味を変えず、`identity` が `vlanNNN` かつ `NNN` が `1..4094` の場合にだけ、VLAN 属性を追加で返します。それ以外の `identity` は通常どおり扱い、VLAN reply は返しません。
 
+オプションの `mac` 列を使う場合、`rlm_dpsk` が期待する書式は `f44ee3989fe0` のような 12 桁の16進文字列です。
+
+- `f44ee3989fe0` は有効
+- `f4-4e-e3-98-9f-e0` は `psk.csv` では無効
+- `f4:4e:e3:98:9f:e0` は `psk.csv` では無効
+
+また、CSV は上から順に評価されるため、先に一致した行が使われます。汎用ルールと MAC 固定ルールを混在させる場合は、より限定的な MAC 固定ルールを先に置く必要があります。
+
 ### VLAN あり
 
 ```csv
@@ -429,7 +437,7 @@ Cisco-AVPair += "psk-mode=hex"
 `rlm_dpsk` が対応する MAC 指定付きの例:
 
 ```csv
-00440044,00440044,f4-4e-e3-98-9f-e0
+00440044,00440044,f44ee3989fe0
 ```
 
 成功時は以下のみ返します。
@@ -506,6 +514,34 @@ dpsk: .../psk.csv[0] Failed to find ',' after identity
 ```
 
 これは password mismatch ではなく、CSV フォーマット異常です。
+
+### ルール順序の例
+
+CSV は上から順に評価されるため、次の順序だと
+
+```csv
+00330033,00330033
+00330033,00330033,f44ee3989fe0
+```
+
+通常は先に汎用ルールが一致します。
+
+MAC 固定ルールを優先したい場合は、次の順序にします。
+
+```csv
+00330033,00330033,f44ee3989fe0
+00330033,00330033
+```
+
+参考:
+
+- FreeRADIUS DPSK docs:
+  https://www.freeradius.org/documentation/freeradius-server/4.0.0/reference/raddb/mods-available/dpsk.html
+- FreeRADIUS `rlm_dpsk.c` source:
+  https://doc.freeradius.org/rlm__dpsk_8c_source.html
+
+[^1]: FreeRADIUS DPSK module docs, CSV format and top-to-bottom read order.
+[^2]: `rlm_dpsk.c` source: `token_mac` must be length 12 and is base16-decoded; file is processed sequentially.
 
 ## 補足
 

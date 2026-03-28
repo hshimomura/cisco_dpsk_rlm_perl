@@ -377,6 +377,14 @@ identity,psk[,mac]
 
 This helper keeps the original `rlm_dpsk` meaning of `identity`. If the `identity` is `vlanNNN` and `NNN` is in the valid range `1..4094`, the helper additionally returns VLAN tunnel attributes in the Access-Accept. For any other identity value, VLAN reply attributes are not added.
 
+When the optional `mac` column is used, `rlm_dpsk` expects a plain 12-hex-digit station MAC such as `f44ee3989fe0`.
+
+- `f44ee3989fe0` is valid
+- `f4-4e-e3-98-9f-e0` is not valid in `psk.csv`
+- `f4:4e:e3:98:9f:e0` is not valid in `psk.csv`
+
+Matching order also matters. The CSV file is read from top to bottom, and the first matching entry wins. If you mix generic rules and MAC-specific rules, place the more specific MAC-constrained entries before broader ones.
+
 ### VLAN-enabled identity
 
 ```csv
@@ -402,7 +410,7 @@ Cisco-AVPair += "psk-mode=hex"
 Optional MAC-specific form supported by `rlm_dpsk`:
 
 ```csv
-00440044,00440044,f4-4e-e3-98-9f-e0
+00440044,00440044,f44ee3989fe0
 ```
 
 Expected reply on success:
@@ -479,6 +487,34 @@ dpsk: .../psk.csv[0] Failed to find ',' after identity
 ```
 
 This means the CSV file itself is malformed, not that the password mismatched.
+
+### Rule ordering example
+
+Because the file is evaluated top to bottom, this order:
+
+```csv
+00330033,00330033
+00330033,00330033,f44ee3989fe0
+```
+
+will usually match the generic entry first.
+
+If you want the MAC-specific rule to take precedence, write it in this order:
+
+```csv
+00330033,00330033,f44ee3989fe0
+00330033,00330033
+```
+
+References:
+
+- FreeRADIUS DPSK docs:
+  https://www.freeradius.org/documentation/freeradius-server/4.0.0/reference/raddb/mods-available/dpsk.html
+- FreeRADIUS `rlm_dpsk.c` source:
+  https://doc.freeradius.org/rlm__dpsk_8c_source.html
+
+[^1]: FreeRADIUS DPSK module docs, CSV format and top-to-bottom read order.
+[^2]: `rlm_dpsk.c` source: `token_mac` must be length 12 and is base16-decoded; file is processed sequentially.
 
 ## Notes
 
