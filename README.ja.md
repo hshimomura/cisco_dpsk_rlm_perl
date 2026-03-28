@@ -183,13 +183,13 @@ perl_dpsk
 
 - `authorize {}`
   - `rewrite_called_station_id`
-  - `if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) { perl_dpsk; dpsk; if (ok || updated) { ... &Auth-Type := dpsk ... } }`
+  - iPSK/MAB と EasyPSK を併用する場合は `foreach &request:Cisco-AVPair` で `method=mab` と `cisco-bssid=` を見分け、MAB 側と EasyPSK 側に振り分ける
 - `authenticate {}`
   - `Auth-Type dpsk { dpsk; if (updated || ok) { ok } }`
 - `post-auth {}`
-  - `if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) { perl_dpsk }`
+  - `if (&control:Tmp-String-9 == "yes") { perl_dpsk }`
 - `Post-Auth-Type REJECT {}`
-  - `if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) { perl_dpsk }`
+  - `if (&control:Tmp-String-9 == "yes") { perl_dpsk }`
 
 ### 1. Perl module 定義
 
@@ -210,6 +210,66 @@ perl perl_dpsk {
 注記:
 この条件分岐を入れておくと、Cisco EasyPSK 用属性を持たない通常の MAB リクエストが `perl_dpsk` によって reject されるのを防げます。
 
+併用時の重要な補足:
+iPSK/MAB と Cisco EasyPSK を同じ FreeRADIUS で併用する場合、単純な
+`"%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/`
+だけでは十分に堅牢とは言えません。
+Catalyst 9800 の EasyPSK request には binary の `cisco-8021x-data` が含まれるため、`Cisco-AVPair[*]` 全体に regex をかけると NUL byte を含む展開で評価に失敗することがあります。
+
+そのため、併用時は `Cisco-AVPair` を 1 件ずつ `foreach` で見て、ASCII で安全に判定できる値だけを拾う構成を推奨します。例えば次のようにします。
+
+- `method=mab` を見つけたら MAB request
+- `cisco-bssid=` を見つけたら EasyPSK request
+
+例:
+
+```text
+rewrite_called_station_id
+update control {
+	&Tmp-String-8 := "no"
+	&Tmp-String-9 := "no"
+}
+foreach &request:Cisco-AVPair {
+	if ("%{Foreach-Variable-0}" == "method=mab") {
+		update control {
+			&Tmp-String-8 := "yes"
+		}
+	}
+	if ("%{Foreach-Variable-0}" =~ /^cisco-bssid=/) {
+		update control {
+			&Tmp-String-9 := "yes"
+		}
+	}
+}
+if (&Service-Type && &NAS-Port-Type && &Service-Type == Call-Check && &NAS-Port-Type == Wireless-802.11 && &control:Tmp-String-8 == "yes" && &control:Tmp-String-9 != "yes" && !&EAP-Message) {
+	sql
+	if (ok) {
+		pap
+	}
+	else {
+		update control {
+			&Auth-Type := Accept
+		}
+	}
+	return
+}
+if (&control:Tmp-String-9 == "yes") {
+	perl_dpsk
+	dpsk
+	if (ok || updated) {
+		update control {
+			&Auth-Type := dpsk
+		}
+	}
+}
+```
+
+要点:
+
+- 通常の wireless MAB だけを SQL / PAP または fallback Accept に流す
+- EasyPSK request のときだけ `perl_dpsk` / `dpsk` を呼ぶ
+- binary を含みうる `Cisco-AVPair[*]` 全体には regex をかけない
+
 追加箇所が分かりやすいように、差分形式でも示します。
 
 ```diff
@@ -222,7 +282,35 @@ perl perl_dpsk {
  	digest
  
 + 	rewrite_called_station_id
-+	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++	update control {
++		&Tmp-String-8 := "no"
++		&Tmp-String-9 := "no"
++	}
++	foreach &request:Cisco-AVPair {
++		if ("%{Foreach-Variable-0}" == "method=mab") {
++			update control {
++				&Tmp-String-8 := "yes"
++			}
++		}
++		if ("%{Foreach-Variable-0}" =~ /^cisco-bssid=/) {
++			update control {
++				&Tmp-String-9 := "yes"
++			}
++		}
++	}
++	if (&Service-Type && &NAS-Port-Type && &Service-Type == Call-Check && &NAS-Port-Type == Wireless-802.11 && &control:Tmp-String-8 == "yes" && &control:Tmp-String-9 != "yes" && !&EAP-Message) {
++		sql
++		if (ok) {
++			pap
++		}
++		else {
++			update control {
++				&Auth-Type := Accept
++			}
++		}
++		return
++	}
++	if (&control:Tmp-String-9 == "yes") {
 +		perl_dpsk
 +		dpsk
 +		if (ok || updated) {
@@ -251,7 +339,35 @@ authorize {
 	digest
 
 +	rewrite_called_station_id
-+	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++	update control {
++		&Tmp-String-8 := "no"
++		&Tmp-String-9 := "no"
++	}
++	foreach &request:Cisco-AVPair {
++		if ("%{Foreach-Variable-0}" == "method=mab") {
++			update control {
++				&Tmp-String-8 := "yes"
++			}
++		}
++		if ("%{Foreach-Variable-0}" =~ /^cisco-bssid=/) {
++			update control {
++				&Tmp-String-9 := "yes"
++			}
++		}
++	}
++	if (&Service-Type && &NAS-Port-Type && &Service-Type == Call-Check && &NAS-Port-Type == Wireless-802.11 && &control:Tmp-String-8 == "yes" && &control:Tmp-String-9 != "yes" && !&EAP-Message) {
++		sql
++		if (ok) {
++			pap
++		}
++		else {
++			update control {
++				&Auth-Type := Accept
++			}
++		}
++		return
++	}
++	if (&control:Tmp-String-9 == "yes") {
 +		perl_dpsk
 +		dpsk
 +		if (ok || updated) {
@@ -306,13 +422,14 @@ authenticate {
 
 注記:
 ここで `perl_dpsk` を無条件に呼ぶと、EasyPSK ではない Access-Accept に EasyPSK 専用属性や error-cause が混入することがあります。
+上の併用構成を採る場合は、ここも `if (&control:Tmp-String-9 == "yes") { ... }` で囲むほうが安全です。
 
 追加箇所:
 
 ```diff
  # sites-enabled/default
  post-auth {
-+	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++	if (&control:Tmp-String-9 == "yes") {
 +		perl_dpsk
 +	}
  
@@ -326,7 +443,7 @@ authenticate {
 
 ```diff
 post-auth {
-+	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++	if (&control:Tmp-String-9 == "yes") {
 +		perl_dpsk
 +	}
 
@@ -344,6 +461,7 @@ reject 時の `cisco-easy-psk-error-cause` を返すため、ここでも EasyPS
 
 注記:
 これにより EasyPSK の reject 処理は維持しつつ、通常の MAB reject が EasyPSK failure として扱われるのを防げます。
+上の併用構成を採る場合は、ここも `if (&control:Tmp-String-9 == "yes") { ... }` を使います。
 
 追加箇所:
 
@@ -354,7 +472,7 @@ reject 時の `cisco-easy-psk-error-cause` を返すため、ここでも EasyPS
  	sql
  	attr_filter.access_reject
  	eap
-+	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++	if (&control:Tmp-String-9 == "yes") {
 +		perl_dpsk
 +	}
  	remove_reply_message_if_eap
@@ -367,7 +485,7 @@ Post-Auth-Type REJECT {
 	sql
 	attr_filter.access_reject
 	eap
-+	if ("%{request:Cisco-AVPair[*]}" =~ /cisco-anonce=/) {
++	if (&control:Tmp-String-9 == "yes") {
 +		perl_dpsk
 +	}
 	remove_reply_message_if_eap
