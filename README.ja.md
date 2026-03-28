@@ -106,6 +106,44 @@ FreeRADIUS サーバには Perl モジュールを以下へ配置します。
 
 ## FreeRADIUS 設定
 
+このヘルパーのために最低限追加する内容を抜き出すと、次のとおりです。
+
+```text
+rewrite_called_station_id
+perl_dpsk
+dpsk
+if (ok || updated) {
+	update control {
+		&Auth-Type := dpsk
+	}
+}
+
+Auth-Type dpsk {
+	dpsk
+	if (updated || ok) {
+		ok
+	}
+}
+
+perl_dpsk
+
+perl_dpsk
+```
+
+配置先で整理すると次です。
+
+- `authorize {}`
+  - `rewrite_called_station_id`
+  - `perl_dpsk`
+  - `dpsk`
+  - `if (ok || updated) { ... &Auth-Type := dpsk ... }`
+- `authenticate {}`
+  - `Auth-Type dpsk { dpsk; if (updated || ok) { ok } }`
+- `post-auth {}`
+  - `perl_dpsk`
+- `Post-Auth-Type REJECT {}`
+  - `perl_dpsk`
+
 ### 1. Perl module 定義
 
 `mods-enabled/perl_dpsk`

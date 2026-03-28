@@ -104,6 +104,44 @@ Expected environment:
 
 ## FreeRADIUS configuration
 
+The minimum effective additions required by this helper are:
+
+```text
+rewrite_called_station_id
+perl_dpsk
+dpsk
+if (ok || updated) {
+	update control {
+		&Auth-Type := dpsk
+	}
+}
+
+Auth-Type dpsk {
+	dpsk
+	if (updated || ok) {
+		ok
+	}
+}
+
+perl_dpsk
+
+perl_dpsk
+```
+
+Placed by section, this means:
+
+- `authorize {}`:
+  - `rewrite_called_station_id`
+  - `perl_dpsk`
+  - `dpsk`
+  - `if (ok || updated) { ... &Auth-Type := dpsk ... }`
+- `authenticate {}`:
+  - `Auth-Type dpsk { dpsk; if (updated || ok) { ok } }`
+- `post-auth {}`:
+  - `perl_dpsk`
+- `Post-Auth-Type REJECT {}`:
+  - `perl_dpsk`
+
 ### 1. Perl module definition
 
 Create `mods-enabled/perl_dpsk`:
