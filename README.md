@@ -170,7 +170,6 @@ Highlighted additions:
  	digest
  
  	rewrite_called_station_id
-+	# >>> Cisco EasyPSK begin
 +	perl_dpsk
 +	dpsk
 +	if (ok || updated) {
@@ -178,7 +177,6 @@ Highlighted additions:
 +			&Auth-Type := dpsk
 +		}
 +	}
-+	# <<< Cisco EasyPSK end
  
  	suffix
  	eap
@@ -198,14 +196,14 @@ authorize {
 	mschap
 	digest
 
-	rewrite_called_station_id
-	perl_dpsk
-	dpsk
-	if (ok || updated) {
-		update control {
-			&Auth-Type := dpsk
-		}
-	}
++	rewrite_called_station_id
++	perl_dpsk
++	dpsk
++	if (ok || updated) {
++		update control {
++			&Auth-Type := dpsk
++		}
++	}
 
 	suffix
 	eap
@@ -237,12 +235,12 @@ Highlighted additions:
 
 ```text
 authenticate {
-	Auth-Type dpsk {
-		dpsk
-		if (updated || ok) {
-			ok
-		}
-	}
++	Auth-Type dpsk {
++		dpsk
++		if (updated || ok) {
++			ok
++		}
++	}
 }
 ```
 
@@ -269,7 +267,7 @@ Highlighted additions:
 
 ```text
 post-auth {
-	perl_dpsk
++	perl_dpsk
 
 	if (&User-Name != "anonymous") {
 		sql
@@ -292,9 +290,7 @@ Highlighted additions:
  	sql
  	attr_filter.access_reject
  	eap
-+	# >>> Cisco EasyPSK begin
 +	perl_dpsk
-+	# <<< Cisco EasyPSK end
  	remove_reply_message_if_eap
  }
 ```
@@ -305,7 +301,7 @@ Post-Auth-Type REJECT {
 	sql
 	attr_filter.access_reject
 	eap
-	perl_dpsk
++	perl_dpsk
 	remove_reply_message_if_eap
 }
 ```
