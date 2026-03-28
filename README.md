@@ -2,6 +2,8 @@
 
 Perl helper module for Cisco EasyPSK on FreeRADIUS 3.2.x.
 
+The Cisco WLC referenced in this repository is Cisco Catalyst 9800 Wireless LAN Controller.
+
 This project complements `rlm_dpsk` by:
 
 - extracting Cisco EasyPSK request parameters from `Cisco-AVPair`
@@ -99,6 +101,15 @@ The implementation was validated with the following behavior observed in `radius
 - VLAN reply added only when `PSK-Identity` matches `^vlan([1-9][0-9]{0,3})$`
 - password mismatch reject returns:
   - `Cisco-AVPair += "cisco-easy-psk-error-cause=2"`
+
+## Test environment
+
+The interoperability checks described in this repository were performed with the following controller software:
+
+- Cisco IOS Software [IOS XE]
+- Cisco Catalyst 9800 Wireless LAN Controller
+- `C9800_IOSXE-K9`
+- Version `17.18.2`
 
 ## Installation
 
