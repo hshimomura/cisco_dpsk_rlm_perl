@@ -87,6 +87,18 @@ Path note:
 - On many Linux systems, FreeRADIUS is instead rooted at `/etc/raddb`.
 - On Ubuntu packages, FreeRADIUS 3 is commonly rooted at `/etc/freeradius/3.0`.
 
+## Practical limits of this FreeRADIUS implementation
+
+This repository implements EasyPSK matching on the FreeRADIUS side by feeding the Cisco handshake material into `rlm_dpsk` and letting it search the candidate PSKs listed in `mods-config/dpsk/psk.csv`.
+
+That means:
+
+- the server effectively tries candidate PSKs until one matches the handshake
+- response time grows with the size of the candidate set
+- large PSK inventories are not a good fit
+
+In other words, this repository is suitable for lab work, compatibility testing, and small controlled environments, but not as a recommendation for large-scale EasyPSK production.
+
 ## Installation
 
 Install the Perl module on the FreeRADIUS host:
@@ -169,7 +181,7 @@ Highlighted additions:
  	mschap
  	digest
  
- 	rewrite_called_station_id
++ 	rewrite_called_station_id
 +	perl_dpsk
 +	dpsk
 +	if (ok || updated) {
@@ -188,7 +200,7 @@ Highlighted additions:
  }
 ```
 
-```text
+```diff
 authorize {
 	filter_username
 	preprocess
@@ -224,16 +236,16 @@ Highlighted additions:
 ```diff
  # sites-enabled/default
  authenticate {
- 	Auth-Type dpsk {
- 		dpsk
++ 	Auth-Type dpsk {
++ 		dpsk
 +		if (updated || ok) {
 +			ok
 +		}
- 	}
++ 	}
  }
 ```
 
-```text
+```diff
 authenticate {
 +	Auth-Type dpsk {
 +		dpsk
@@ -253,9 +265,7 @@ Highlighted additions:
 ```diff
  # sites-enabled/default
  post-auth {
-+	# >>> Cisco EasyPSK begin
 +	perl_dpsk
-+	# <<< Cisco EasyPSK end
  
  	if (&User-Name != "anonymous") {
  		sql
@@ -265,7 +275,7 @@ Highlighted additions:
  }
 ```
 
-```text
+```diff
 post-auth {
 +	perl_dpsk
 
@@ -295,7 +305,7 @@ Highlighted additions:
  }
 ```
 
-```text
+```diff
 Post-Auth-Type REJECT {
 	auth_log
 	sql
@@ -467,6 +477,7 @@ This means the CSV file itself is malformed, not that the password mismatched.
 ## Notes
 
 - `radpostauth_pkey` duplicate errors are unrelated to EasyPSK itself.
+- This repository is published under the MIT License to keep reuse simple for GitHub distribution.
 - Cisco ISE support should be rechecked for future releases, but this repository documents the behavior validated against ISE 3.5 Patch 2 at the time of writing.
 
 ## iPSK vs EasyPSK
@@ -488,18 +499,6 @@ Based on Cisco's EasyPSK documentation:
 - Cisco documents EasyPSK as WPA2-only. The EasyPSK deployment guide explicitly states that the feature is not supported with WPA3.
 - Since 6 GHz requires WPA3/SAE, EasyPSK is not a fit for Wi‑Fi 6E / 6 GHz deployments.
 - Cisco's configuration guide lists EasyPSK limitations such as Local Mode, Central Authentication, and Central Switching only, which is materially narrower than newer iPSK/WPA3 options.
-
-### Practical limits of this FreeRADIUS implementation
-
-This repository implements EasyPSK matching on the FreeRADIUS side by feeding the Cisco handshake material into `rlm_dpsk` and letting it search the candidate PSKs listed in `mods-config/dpsk/psk.csv`.
-
-That means:
-
-- the server effectively tries candidate PSKs until one matches the handshake
-- response time grows with the size of the candidate set
-- large PSK inventories are not a good fit
-
-In other words, this repository is suitable for lab work, compatibility testing, and small controlled environments, but not as a recommendation for large-scale EasyPSK production.
 
 ### Security tradeoff
 
