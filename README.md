@@ -104,8 +104,14 @@ In other words, this repository is suitable for lab work, compatibility testing,
 Install the Perl module on the FreeRADIUS host:
 
 ```text
-/usr/local/etc/raddb/cisco_dpsk_rlm_perl.pl
+/usr/local/etc/raddb/mods-config/perl/cisco_dpsk_rlm_perl.pl
 ```
+
+Recommended layout by platform:
+
+- FreeBSD: `/usr/local/etc/raddb/mods-config/perl/cisco_dpsk_rlm_perl.pl`
+- Linux with `/etc/raddb`: `/etc/raddb/mods-config/perl/cisco_dpsk_rlm_perl.pl`
+- Ubuntu: `/etc/freeradius/3.0/mods-config/perl/cisco_dpsk_rlm_perl.pl`
 
 Expected environment:
 
@@ -160,7 +166,7 @@ Create `mods-enabled/perl_dpsk`:
 
 ```text
 perl perl_dpsk {
-	filename = /usr/local/etc/raddb/cisco_dpsk_rlm_perl.pl
+	filename = ${modconfdir}/perl/cisco_dpsk_rlm_perl.pl
 	func_authorize = authorize
 	func_post_auth = post_auth
 }

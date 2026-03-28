@@ -108,8 +108,17 @@ Cisco Catalyst 9800 WLC の EasyPSK では、認証に必要な値が主に `Cis
 FreeRADIUS サーバには Perl モジュールを以下へ配置します。
 
 ```text
-/usr/local/etc/raddb/cisco_dpsk_rlm_perl.pl
+/usr/local/etc/raddb/mods-config/perl/cisco_dpsk_rlm_perl.pl
 ```
+
+推奨配置の例:
+
+- FreeBSD:
+  `/usr/local/etc/raddb/mods-config/perl/cisco_dpsk_rlm_perl.pl`
+- `/etc/raddb` 系の Linux:
+  `/etc/raddb/mods-config/perl/cisco_dpsk_rlm_perl.pl`
+- Ubuntu:
+  `/etc/freeradius/3.0/mods-config/perl/cisco_dpsk_rlm_perl.pl`
 
 前提:
 
@@ -164,7 +173,7 @@ perl_dpsk
 
 ```text
 perl perl_dpsk {
-	filename = /usr/local/etc/raddb/cisco_dpsk_rlm_perl.pl
+	filename = ${modconfdir}/perl/cisco_dpsk_rlm_perl.pl
 	func_authorize = authorize
 	func_post_auth = post_auth
 }
