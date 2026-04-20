@@ -311,3 +311,78 @@ If this work were carried further upstream, the next logical step would be:
 - move IOS XE EasyPSK request normalization from Perl into `rlm_preprocess` in C
 
 That would preserve the working architecture discovered here while avoiding a Perl dependency for Cisco request parsing.
+
+
+## Observed connection logs
+
+The following points were confirmed from live `radiusd -X` traces during interoperability testing.
+
+### Ruckus DPSK
+
+Observed request normalization:
+- `Ruckus-SSID := dpsk`
+- `Ruckus-BSSID := 0xa80bfb747330`
+- `FreeRADIUS-802.1X-Anonce` populated from `Ruckus-DPSK-Anonce`
+- `FreeRADIUS-802.1X-EAPoL-Key-Msg` populated from `Ruckus-DPSK-EAPOL-Key-Frame`
+
+Observed module path:
+- `dpsk: Found FreeRADIUS-802.1X-EAPoL-Key-Msg.  Setting 'Auth-Type  = dpsk'`
+- `dpsk: Creating &reply:Pairwise-Master-Key`
+- `dpsk: Creating &reply:PSK-Identity and &reply:Pre-Shared-Key`
+
+Observed reply path:
+- `ruckus_dpsk_reply` updated the reply
+- `MS-MPPE-Recv-Key := &reply:Pairwise-Master-Key`
+- final result was `Access-Accept`
+
+### Meraki EasyPSK
+
+Observed request normalization:
+- `Meraki-IPSK-SSID := EasyPSK`
+- `Meraki-IPSK-BSSID := 0xce6e3a601c50`
+- `FreeRADIUS-802.1X-Anonce` populated from `Meraki-IPSK-Anonce`
+- `FreeRADIUS-802.1X-EAPoL-Key-Msg` populated from `Meraki-IPSK-EAPOL`
+
+Observed module path:
+- `dpsk: Found FreeRADIUS-802.1X-EAPoL-Key-Msg.  Setting 'Auth-Type  = dpsk'`
+- `dpsk: Creating &reply:Pairwise-Master-Key`
+- `dpsk: Creating &reply:PSK-Identity and &reply:Pre-Shared-Key`
+- `dpsk: Creating VLAN reply attributes for VLAN 2065`
+
+Observed reply path:
+- `meraki_easy_psk_reply` updated the reply
+- `Tunnel-Password := &reply:Pre-Shared-Key`
+- final reply included:
+  - `Tunnel-Type = VLAN`
+  - `Tunnel-Medium-Type = IEEE-802`
+  - `Tunnel-Private-Group-Id = "2065"`
+  - `Tunnel-Password = <<< secret >>>`
+- final result was `Access-Accept`
+
+### IOS XE EasyPSK
+
+Observed request normalization in Perl:
+- `Cisco-AVPair` was decoded
+- `cisco-anonce` extracted and written to `FreeRADIUS-802.1X-Anonce`
+- `cisco-8021x-data` extracted and written to `FreeRADIUS-802.1X-EAPoL-Key-Msg`
+- `cisco-bssid` overrode `Called-Station-MAC`
+- `cisco-wlan-ssid` aligned `Called-Station-SSID`
+
+Observed module path:
+- `cisco_easy_psk_perl` returned `updated`
+- `dpsk: Found FreeRADIUS-802.1X-EAPoL-Key-Msg.  Setting 'Auth-Type  = dpsk'`
+- `dpsk: Creating &reply:Pairwise-Master-Key`
+- `dpsk: Creating &reply:PSK-Identity and &reply:Pre-Shared-Key`
+- `dpsk: Creating VLAN reply attributes for VLAN 2065`
+
+Observed reply path:
+- `cisco_easy_psk_reply` updated the reply
+- `Cisco-AVPair += "psk=%{reply:Pre-Shared-Key}"`
+- `Cisco-AVPair += "psk-mode=ascii"`
+- final reply included:
+  - `Tunnel-Type = VLAN`
+  - `Tunnel-Medium-Type = IEEE-802`
+  - `Tunnel-Private-Group-Id = "2065"`
+  - `Cisco-AVPair = "psk=00330033"`
+  - `Cisco-AVPair = "psk-mode=ascii"`
+- final result was `Access-Accept`

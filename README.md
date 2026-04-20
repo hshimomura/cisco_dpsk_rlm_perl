@@ -1,17 +1,17 @@
-# Cisco EasyPSK helper for FreeRADIUS `rlm_perl`
+# IOS XE EasyPSK helper for FreeRADIUS `rlm_perl`
 
-This repository contains a small `rlm_perl` helper for Cisco EasyPSK on FreeRADIUS 3.2.x.
+This repository contains a small `rlm_perl` helper for IOS XE EasyPSK on FreeRADIUS 3.2.x.
 
 The current design is intentionally narrow:
 - the Perl helper only normalizes Cisco request attributes into the generic DPSK attributes that `rlm_dpsk` already consumes
 - vendor-specific reply attributes are generated in `policy.d/dpsk`
 - VLAN assignment is handled by the updated `rlm_dpsk` module via standard tunnel reply attributes
 
-This reflects what worked best during interoperability testing with Cisco Catalyst 9800 EasyPSK, Meraki iPSK, and Ruckus DPSK.
+This reflects what worked best during interoperability testing with IOS XE EasyPSK, Meraki EasyPSK, and Ruckus DPSK.
 
 ## What this helper does
 
-Cisco EasyPSK sends the handshake material in `Cisco-AVPair`, including binary payloads such as:
+IOS XE EasyPSK sends the handshake material in `Cisco-AVPair`, including binary payloads such as:
 - `cisco-anonce`
 - `cisco-8021x-data`
 - `cisco-bssid`
@@ -36,7 +36,7 @@ The newer approach is:
 - let `rlm_dpsk` expose generic reply attributes
 - use local policy to translate those into vendor-specific replies
 
-For Cisco EasyPSK that means:
+For IOS XE EasyPSK that means:
 - `reply:Pre-Shared-Key` is turned into `Cisco-AVPair += "psk=..."`
 - `Cisco-AVPair += "psk-mode=ascii"` is added in policy
 - if VLAN is configured in `psk.csv`, the updated `rlm_dpsk` returns standard tunnel attributes directly
@@ -59,7 +59,7 @@ Typical paths:
 - many Linux systems: `/etc/raddb`
 - Ubuntu FreeRADIUS 3 packages: `/etc/freeradius/3.0`
 
-This repository only ships the Perl helper and documentation. The policy examples below assume a Linux-style `/etc/freeradius` tree; adjust paths for your platform.
+This repository ships the Perl helper and documentation. The policy examples below assume a Linux-style `/etc/freeradius` tree; adjust paths for your platform.
 
 ## Minimal module definition
 
@@ -142,7 +142,7 @@ For current FreeRADIUS 3.2.x work:
 - use `rlm_dpsk` for matching
 - use local policy for vendor-specific replies
 
-For a future upstream-quality Cisco implementation, the request normalization should likely move from `rlm_perl` into `rlm_preprocess` in C.
+For a future upstream-quality IOS XE EasyPSK implementation, the request normalization should likely move from `rlm_perl` into `rlm_preprocess` in C.
 
 ## Additional notes
 
