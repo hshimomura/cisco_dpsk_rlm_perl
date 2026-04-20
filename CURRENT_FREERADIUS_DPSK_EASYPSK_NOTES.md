@@ -1,36 +1,41 @@
 # Current notes on DPSK / EasyPSK implementation in FreeRADIUS 3.2.x
 
-This note captures what was learned while testing:
-- Cisco Catalyst 9800 EasyPSK
-- Meraki iPSK / EasyPSK-style requests
+This note is written as a companion comment to FreeRADIUS pull request:
+
+- `rlm_dpsk: add generic reply attributes and optional VLAN replies`
+- PR [#5830](https://github.com/FreeRADIUS/freeradius-server/pull/5830)
+
+It summarizes what was learned while testing the policy-driven approach around:
 - Ruckus DPSK
+- Meraki EasyPSK
+- IOS XE EasyPSK
 - FreeRADIUS 3.2.x with `rlm_dpsk`
 
-The goal is to document the shape that works **now**, even if some parts are still better candidates for later upstream implementation in C.
+The goal is to document what worked in practice, what needed local policy, and what still looks like a better fit for later implementation in C.
 
 ## Main lessons learned
 
-## 1. `rlm_dpsk` should stay vendor-neutral
+### 1. `rlm_dpsk` should stay vendor-neutral
 
 The cleanest split is:
 - vendor-specific request normalization before `rlm_dpsk`
 - generic key matching inside `rlm_dpsk`
 - vendor-specific reply formatting in policy
 
-That keeps `rlm_dpsk` reusable across Cisco, Meraki, and Ruckus.
+That keeps `rlm_dpsk` reusable across Ruckus DPSK, Meraki EasyPSK, and IOS XE EasyPSK.
 
-## 2. Current `rlm_dpsk` can now expose enough reply attributes
+### 2. Exposing reply attributes is what makes local policy practical
 
-The useful reply attributes are now:
+The useful reply attributes are:
 - `reply:Pairwise-Master-Key`
 - `reply:PSK-Identity`
 - `reply:Pre-Shared-Key`
 
-This is important because it lets local policy build vendor-specific reply attributes without forcing those formats into the module.
+This matters because local policy can then build vendor-specific reply attributes without forcing those reply formats into the module.
 
-## 3. Optional VLAN assignment belongs in generic reply attributes
+### 3. Optional VLAN assignment belongs in generic reply attributes
 
-The useful CSV format is now:
+The useful CSV format is:
 
 ```text
 identity,psk[,mac[,vlanid]]
@@ -41,23 +46,23 @@ If `vlanid` is present, `rlm_dpsk` returns standard tunnel reply attributes:
 - `Tunnel-Medium-Type = IEEE-802`
 - `Tunnel-Private-Group-Id = "<vlanid>"`
 
-That is better than hard-coding vendor-specific VLAN reply formats in the module.
+That is cleaner than hard-coding vendor-specific VLAN reply formats inside the module.
 
-## 4. Cisco request parsing is the awkward part
+### 4. IOS XE EasyPSK request parsing is the awkward part
 
-Cisco EasyPSK carries required request data in `Cisco-AVPair`, including binary payloads.
+IOS XE EasyPSK carries required request data in `Cisco-AVPair`, including binary payloads.
 
-The request-side problem is not the matching logic itself. The real problem is safely decoding:
+The hard part is not the DPSK matching logic itself. The hard part is safely decoding:
 - `cisco-anonce`
 - `cisco-8021x-data`
 - `cisco-bssid`
 - `cisco-wlan-ssid`
 
-In FreeRADIUS 3.2.x, a small Perl helper works for lab validation. For a cleaner upstream path, this normalization should eventually move into `rlm_preprocess` in C.
+In FreeRADIUS 3.2.x, a small `rlm_perl` helper works well enough for lab validation. For a cleaner upstream path, this normalization should eventually move into `rlm_preprocess` in C.
 
-## 5. Cisco reply formatting does not need to live in Perl
+### 5. IOS XE EasyPSK reply formatting does not need to live in Perl
 
-Once `reply:Pre-Shared-Key` is exposed, Cisco reply formatting can be done in policy:
+Once `reply:Pre-Shared-Key` is exposed, IOS XE EasyPSK reply formatting can be done in policy:
 
 ```text
 update reply {
@@ -66,20 +71,33 @@ update reply {
 }
 ```
 
-That is simpler than having Perl generate the final Cisco reply.
+That is simpler than having Perl generate the final reply.
 
-## 6. `rlm_perl` is acceptable for exploration, not ideal as the final upstream home
+### 6. `rlm_perl` is good for exploration, but probably not the final upstream home
 
 `rlm_perl` was useful to prove:
-- what Cisco fields are required
+- which IOS XE EasyPSK fields are required
 - how Cisco escaped AVPairs should be decoded
-- which generic attributes must be populated
+- which generic attributes must be populated before `rlm_dpsk`
 
-But for maintainability and robustness, the better long-term home for Cisco request normalization is a C implementation in a preprocessing layer.
+But for maintainability and robustness, the better long-term home for IOS XE EasyPSK request normalization is a C implementation in a preprocessing layer.
+
+## What was missing in FreeRADIUS 3.2.7
+
+At the FreeRADIUS 3.2.7 stage, the policy-driven design was not complete enough for this workflow.
+
+The practical problems found during testing were:
+- `rlm_dpsk` did not expose enough generic reply state for local policy to format vendor-specific replies cleanly
+- in particular, using `update reply` in policy for all of the needed vendor-specific reply paths was not practical without exposing `Pairwise-Master-Key`, `PSK-Identity`, and `Pre-Shared-Key` in a consistent way
+- optional VLAN assignment from the CSV source was not available as a generic reply path
+
+In short, at the 3.2.7 point it was not possible to finish the whole design cleanly by updating reply attributes only in local policy.
+
+That is why the changes proposed in PR #5830 are important: they make the local-policy approach practical instead of forcing more vendor-specific logic into Perl or into the module itself.
 
 ## Recommended configuration items
 
-## Module configuration
+### Module configuration
 
 Example `mods-available/dpsk`:
 
@@ -101,19 +119,19 @@ perl cisco_easy_psk_perl {
 }
 ```
 
-## Client settings
+### Client settings
 
 If the vendor sends `Message-Authenticator`, require it.
 
-For example, when Ruckus already sends it, the client should be configured with:
+For example, when Ruckus DPSK requests already send it, the client should be configured with:
 
 ```text
 require_message_authenticator = yes
 ```
 
-If a device does not send it, that is a separate interoperability decision and should be scoped to that client only.
+If a device does not send it, that should be handled as a separate interoperability decision and scoped only to that client.
 
-## `psk.csv`
+### `psk.csv`
 
 Useful examples:
 
@@ -248,7 +266,7 @@ post-auth {
 
 ## Notes by vendor
 
-## Ruckus
+### Ruckus DPSK
 
 What worked well:
 - request normalization in policy
@@ -257,7 +275,7 @@ What worked well:
 Observed reply pattern:
 - `MS-MPPE-Recv-Key := &reply:Pairwise-Master-Key`
 
-## Meraki
+### Meraki EasyPSK
 
 What worked well:
 - request normalization in policy
@@ -267,7 +285,7 @@ What worked well:
 Observed reply pattern:
 - `Tunnel-Password := &reply:Pre-Shared-Key`
 
-## Cisco Catalyst 9800 EasyPSK
+### IOS XE EasyPSK
 
 What worked well:
 - request normalization in Perl
@@ -290,6 +308,6 @@ Observed reply pattern:
 If this work were carried further upstream, the next logical step would be:
 - keep `rlm_dpsk` generic
 - keep vendor reply formatting in policy
-- move Cisco request normalization from Perl into `rlm_preprocess` in C
+- move IOS XE EasyPSK request normalization from Perl into `rlm_preprocess` in C
 
 That would preserve the working architecture discovered here while avoiding a Perl dependency for Cisco request parsing.
