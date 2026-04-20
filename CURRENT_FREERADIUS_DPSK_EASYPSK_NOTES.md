@@ -1,17 +1,17 @@
 # Current notes on DPSK / EasyPSK implementation in FreeRADIUS 3.2.x
 
-This note is written as a companion comment to FreeRADIUS pull request:
+This note is written as a companion comment to the FreeRADIUS pull request:
 
 - `rlm_dpsk: add generic reply attributes and optional VLAN replies`
 - PR [#5830](https://github.com/FreeRADIUS/freeradius-server/pull/5830)
 
-It summarizes what was learned while testing the policy-driven approach around:
+It summarizes what was learned while testing a policy-driven approach around:
 - Ruckus DPSK
 - Meraki EasyPSK
 - IOS XE EasyPSK
 - FreeRADIUS 3.2.x with `rlm_dpsk`
 
-The goal is to document what worked in practice, what needed local policy, and what still looks like a better fit for later implementation in C.
+The goal is to document what worked in practice, what required local policy, and what still looks like a better fit for a later C implementation.
 
 ## Main lessons learned
 
@@ -50,7 +50,7 @@ That is cleaner than hard-coding vendor-specific VLAN reply formats inside the m
 
 ### 4. IOS XE EasyPSK request parsing is the awkward part
 
-IOS XE EasyPSK carries required request data in `Cisco-AVPair`, including binary payloads.
+IOS XE EasyPSK carries the required request data in `Cisco-AVPair`, including binary payloads.
 
 The hard part is not the DPSK matching logic itself. The hard part is safely decoding:
 - `cisco-anonce`
@@ -82,16 +82,16 @@ That is simpler than having Perl generate the final reply.
 
 But for maintainability and robustness, the better long-term home for IOS XE EasyPSK request normalization is a C implementation in a preprocessing layer.
 
-## What was missing in FreeRADIUS 3.2.7
+## Challenges in FreeRADIUS 3.2.7
 
-At the FreeRADIUS 3.2.7 stage, the policy-driven design was not complete enough for this workflow.
+With the FreeRADIUS 3.2.7 Debian package, the policy-driven design was not complete enough for this workflow.
 
 The practical problems found during testing were:
 - `rlm_dpsk` did not expose enough generic reply state for local policy to format vendor-specific replies cleanly
 - in particular, using `update reply` in policy for all of the needed vendor-specific reply paths was not practical without exposing `Pairwise-Master-Key`, `PSK-Identity`, and `Pre-Shared-Key` in a consistent way
 - optional VLAN assignment from the CSV source was not available as a generic reply path
 
-In short, at the 3.2.7 point it was not possible to finish the whole design cleanly by updating reply attributes only in local policy.
+In short, at the 3.2.7 point, at least in the Debian package build, it was not possible to finish the whole design cleanly by updating reply attributes only in local policy.
 
 That is why the changes proposed in PR #5830 are important: they make the local-policy approach practical instead of forcing more vendor-specific logic into Perl or into the module itself.
 
@@ -303,15 +303,14 @@ Observed reply pattern:
 - `Cisco-AVPair += "psk=%{reply:Pre-Shared-Key}"`
 - `Cisco-AVPair += "psk-mode=ascii"`
 
-## What should likely happen next in FreeRADIUS itself
+## What should the next step be
 
 If this work were carried further upstream, the next logical step would be:
 - keep `rlm_dpsk` generic
 - keep vendor reply formatting in policy
-- move IOS XE EasyPSK request normalization from Perl into `rlm_preprocess` in C
+- move IOS XE EasyPSK request normalization from Perl into `rlm_preprocess` in C, with binary-safe handling for Cisco vendor attributes
 
 That would preserve the working architecture discovered here while avoiding a Perl dependency for Cisco request parsing.
-
 
 ## Observed connection logs
 
