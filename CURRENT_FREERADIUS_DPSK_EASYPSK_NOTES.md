@@ -19,7 +19,7 @@ The working split is:
 That split worked in practice for:
 - Ruckus DPSK
 - Meraki EasyPSK
-- IOS XE EasyPSK
+- IOS XE EasyPSK (requires additional Perl scripts)
 
 ### Why the PR matters
 
@@ -55,53 +55,6 @@ Examples:
 - Meraki EasyPSK: `Tunnel-Password := &reply:Pre-Shared-Key`
 - IOS XE EasyPSK: `Cisco-AVPair += "psk=%{reply:Pre-Shared-Key}"`
 
-## IOS XE EasyPSK on FreeRADIUS 3.2.x
-
-### Why Perl is needed
-
-IOS XE EasyPSK is awkward on FreeRADIUS 3.2.x because the required request-side data arrives in `Cisco-AVPair`, including escaped binary payloads.
-
-The hard part is not DPSK matching itself. The hard part is safely extracting and decoding:
-- `cisco-anonce`
-- `cisco-8021x-data`
-- `cisco-bssid`
-- `cisco-wlan-ssid`
-
-In FreeRADIUS 3.2.x, doing that reliably in `unlang` alone is difficult because:
-- `Cisco-AVPair` may contain binary data
-- request classification based on `Cisco-AVPair[*]` can be tripped by NUL bytes
-- the escaped AVPair values need binary-safe decoding before they can be copied into generic attributes
-
-For lab validation, a small `rlm_perl` helper is a practical answer. It lets FreeRADIUS normalize the Cisco request into the same generic attributes that `rlm_dpsk` already understands.
-
-### What the Perl helper does
-
-The Perl helper is used only for request normalization.
-
-It extracts Cisco-specific values from `Cisco-AVPair` and populates generic request attributes:
-- `cisco-anonce` -> `FreeRADIUS-802.1X-Anonce`
-- `cisco-8021x-data` -> `FreeRADIUS-802.1X-EAPoL-Key-Msg`
-- `cisco-bssid` -> `Called-Station-MAC`
-- `cisco-wlan-ssid` -> `Called-Station-SSID`
-
-That leaves `rlm_dpsk` itself vendor-neutral.
-
-### Why the final reply should stay in policy
-
-Once `reply:Pre-Shared-Key` is available, IOS XE reply formatting does not need to live in Perl.
-
-A simple policy block is enough:
-
-```text
-update reply {
-	&Cisco-AVPair += "psk=%{reply:Pre-Shared-Key}"
-	&Cisco-AVPair += "psk-mode=ascii"
-}
-```
-
-This is simpler to maintain than generating the final Cisco reply directly in Perl.
-
-### Recommended configuration items for IOS XE
 
 #### Module configuration
 
@@ -116,16 +69,8 @@ dpsk {
 }
 ```
 
-Example `mods-available/cisco_easy_psk_perl`:
 
-```text
-perl cisco_easy_psk_perl {
-	filename = /etc/freeradius/mods-config/perl/cisco_easy_psk_perl.pl
-	func_authorize = authorize
-}
-```
-
-#### `psk.csv`
+#### Sample `psk.csv`
 
 Useful examples:
 
@@ -200,27 +145,7 @@ meraki_easy_psk_reply {
 	}
 }
 
-cisco_easy_psk {
-	if (&Cisco-AVPair[*]) {
-		cisco_easy_psk_perl
-	}
-	else {
-		noop
-	}
-}
 
-cisco_easy_psk_reply {
-	if (&request:Cisco-AVPair[*] && &reply:Pre-Shared-Key) {
-		update reply {
-			&Cisco-AVPair += "psk=%{reply:Pre-Shared-Key}"
-			&Cisco-AVPair += "psk-mode=ascii"
-		}
-		updated
-	}
-	else {
-		noop
-	}
-}
 ```
 
 #### Sample call flow in `sites-enabled/default`
@@ -258,6 +183,92 @@ post-auth {
 }
 ```
 
+
+## IOS XE EasyPSK on FreeRADIUS 3.2.x
+
+### Why Perl is needed
+
+IOS XE EasyPSK is awkward on FreeRADIUS 3.2.x because the required request-side data arrives in `Cisco-AVPair`, including binary payloads. 
+
+The hard part is not DPSK matching itself. The hard part is safely extracting and decoding:
+- `cisco-anonce`
+- `cisco-8021x-data`
+- `cisco-bssid`
+- `cisco-wlan-ssid`
+
+In FreeRADIUS 3.2.x, doing that reliably in `unlang` alone is difficult because:
+- `Cisco-AVPair` may contain binary data
+- request classification based on `Cisco-AVPair[*]` can be tripped by NUL bytes
+- the escaped AVPair values need binary-safe decoding before they can be copied into generic attributes
+
+For lab validation, a small `rlm_perl` helper is a practical answer. It lets FreeRADIUS normalize the Cisco request into the same generic attributes that `rlm_dpsk` already understands.
+
+### What the Perl helper does
+
+The Perl helper is used only for request normalization.
+
+It extracts Cisco-specific values from `Cisco-AVPair` and populates generic request attributes:
+- `cisco-anonce` -> `FreeRADIUS-802.1X-Anonce`
+- `cisco-8021x-data` -> `FreeRADIUS-802.1X-EAPoL-Key-Msg`
+- `cisco-bssid` -> `Called-Station-MAC`
+- `cisco-wlan-ssid` -> `Called-Station-SSID`
+
+That leaves `rlm_dpsk` itself vendor-neutral.
+
+### Why the final reply should stay in policy
+
+Once `reply:Pre-Shared-Key` is available, IOS XE reply formatting does not need to live in Perl.
+
+A simple policy block is enough:
+
+```text
+update reply {
+	&Cisco-AVPair += "psk=%{reply:Pre-Shared-Key}"
+	&Cisco-AVPair += "psk-mode=ascii"
+}
+```
+
+This is simpler to maintain than generating the final Cisco reply directly in Perl.
+
+
+### Recommended configuration items for IOS XE
+
+
+Example `mods-available/cisco_easy_psk_perl`:
+
+```text
+perl cisco_easy_psk_perl {
+	filename = /etc/freeradius/mods-config/perl/cisco_easy_psk_perl.pl
+	func_authorize = authorize
+}
+```
+
+
+#### Sample `policy.d/dpsk` for IOS XE
+```text
+cisco_easy_psk {
+	if (&Cisco-AVPair[*]) {
+		cisco_easy_psk_perl
+	}
+	else {
+		noop
+	}
+}
+
+cisco_easy_psk_reply {
+	if (&request:Cisco-AVPair[*] && &reply:Pre-Shared-Key) {
+		update reply {
+			&Cisco-AVPair += "psk=%{reply:Pre-Shared-Key}"
+			&Cisco-AVPair += "psk-mode=ascii"
+		}
+		updated
+	}
+	else {
+		noop
+	}
+}
+```
+
 ### Observed IOS XE behavior
 
 During live `radiusd -X` testing, the IOS XE path that worked was:
@@ -277,6 +288,6 @@ During live `radiusd -X` testing, the IOS XE path that worked was:
 The cleaner long-term direction still looks like:
 - keep `rlm_dpsk` generic
 - keep vendor-specific reply formatting in policy
-- move IOS XE EasyPSK request normalization into a C preprocessing layer with binary-safe Cisco AVPair handling
+- move IOS XE EasyPSK request normalization into a C preprocessing layer with binary-safe Cisco AVPair handling if possible
 
 That preserves the working architecture discovered here while avoiding a Perl dependency for Cisco request parsing.
