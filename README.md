@@ -144,6 +144,22 @@ For current FreeRADIUS 3.2.x work:
 
 For a future upstream-quality IOS XE EasyPSK implementation, the request normalization should likely move from `rlm_perl` into `rlm_preprocess` in C.
 
+## Status of the C implementation
+
+A local C implementation was also validated on FreeRADIUS 3.2.x by decoding IOS XE EasyPSK `Cisco-AVPair` data inside `rlm_preprocess` and writing the decoded results to `Tmp-String-0` and `Tmp-Octets-0..2`. Local policy then mapped those temporary attributes to the generic DPSK request attributes before calling `rlm_dpsk`.
+
+That design worked in practice and successfully authenticated IOS XE EasyPSK requests without the Perl helper.
+
+However, this repository still documents the Perl-based path as the main reusable approach because:
+- it is easier to carry as a local extension
+- it does not require patching the installed FreeRADIUS package
+- the `rlm_preprocess` C version currently looks more like a local patch than an obvious upstream-ready change for FreeRADIUS 3.2.x
+
+In short:
+- Perl helper: recommended documented path for current FreeRADIUS 3.2.x deployments
+- C `rlm_preprocess` version: validated local patch, useful for experiments and private builds
+- long-term upstream direction: a cleaner native adapter-style implementation, as seen in the FreeRADIUS v4 design work
+
 ## Additional notes
 
 See [CURRENT_FREERADIUS_DPSK_EASYPSK_NOTES.md](./CURRENT_FREERADIUS_DPSK_EASYPSK_NOTES.md) for:
