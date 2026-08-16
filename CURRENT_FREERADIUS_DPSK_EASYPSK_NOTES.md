@@ -2,14 +2,17 @@
 
 This note separates two related but different topics:
 
-- what PR [#5830](https://github.com/FreeRADIUS/freeradius-server/pull/5830) changes in generic `rlm_dpsk`
-- what is still needed locally to interoperate with IOS XE EasyPSK on FreeRADIUS 3.2.x
+- the generic `rlm_dpsk` work originating in PR [#5830](https://github.com/FreeRADIUS/freeradius-server/pull/5830)
+- the legacy Perl fallback and native C implementation for IOS XE EasyPSK on FreeRADIUS 3.2.x
 
 The intent is to keep the upstream-facing part vendor-neutral, while documenting the IOS XE-specific request normalization and policy that were required during lab validation.
 
-## PR #5830: generic `rlm_dpsk` changes
+## PR #5830: generic `rlm_dpsk` work
 
-PR #5830 is about making `rlm_dpsk` more useful as a generic backend for multiple vendor workflows.
+PR #5830 was closed without being merged directly. The maintainer integrated
+the relevant generic `rlm_dpsk` changes into the current `v3.2.x` branch with
+adjustments. The result makes `rlm_dpsk` more useful as a generic backend for
+multiple vendor workflows while keeping it vendor-neutral.
 
 The working split is:
 - vendor-specific request normalization before `rlm_dpsk`
@@ -19,7 +22,7 @@ The working split is:
 That split worked in practice for:
 - Ruckus DPSK
 - Meraki EasyPSK
-- IOS XE EasyPSK (requires additional Perl scripts)
+- IOS XE EasyPSK (using either the legacy Perl fallback or the native C work in PR #5921)
 
 ### Why the PR matters
 
@@ -186,7 +189,7 @@ post-auth {
 
 ## IOS XE EasyPSK on FreeRADIUS 3.2.x
 
-### Why Perl is needed
+### Why the Perl fallback exists
 
 IOS XE EasyPSK is awkward on FreeRADIUS 3.2.x because the required request-side data arrives in `Cisco-AVPair`, including binary payloads. 
 
@@ -201,7 +204,14 @@ In FreeRADIUS 3.2.x, doing that reliably in `unlang` alone is difficult because:
 - request classification based on `Cisco-AVPair[*]` can be tripped by NUL bytes
 - the escaped AVPair values need binary-safe decoding before they can be copied into generic attributes
 
-For lab validation, a small `rlm_perl` helper is a practical answer. It lets FreeRADIUS normalize the Cisco request into the same generic attributes that `rlm_dpsk` already understands.
+For stock FreeRADIUS 3.2.x installations without native Cisco preprocessing, a
+small `rlm_perl` helper remains a practical legacy fallback. It lets FreeRADIUS
+normalize the Cisco request into the same generic attributes that `rlm_dpsk`
+already understands.
+
+The preferred implementation is now the binary-safe C preprocessing submitted
+as [PR #5921](https://github.com/FreeRADIUS/freeradius-server/pull/5921), which
+is currently open and does not require `rlm_perl`.
 
 ### What the Perl helper does
 
@@ -281,13 +291,29 @@ During live `radiusd -X` testing, the IOS XE path that worked was:
 - local policy added `Cisco-AVPair = "psk=..."` and `Cisco-AVPair = "psk-mode=ascii"`
 - optional VLAN tunnel attributes were also returned when configured in `psk.csv`
 
+### Fast Transition limitation
+
+The Perl helper is a non-FT fallback. With Cisco Adaptive FT, an FT-capable
+station selects FT-PSK and IOS XE may split the EAPOL-Key frame across multiple
+`cisco-8021x-data` AVPairs. The helper does not implement fragment reassembly,
+the IEEE 802.11r key hierarchy, or AES-CMAC validation.
+
+Configure Fast Transition as Disabled when using this helper with FT-capable
+stations. FT support is tracked in
+[issue #5912](https://github.com/FreeRADIUS/freeradius-server/issues/5912).
+
 ### Longer-term direction
 
-`rlm_perl` is a good exploration and interoperability tool, but probably not the best final upstream home for IOS XE request parsing.
+`rlm_perl` was useful as an exploration and interoperability tool, but it is
+not the preferred final upstream home for IOS XE request parsing.
 
-The cleaner long-term direction still looks like:
+The current direction is:
 - keep `rlm_dpsk` generic
 - keep vendor-specific reply formatting in policy
-- move IOS XE EasyPSK request normalization into a C preprocessing layer with binary-safe Cisco AVPair handling if possible
+- use the binary-safe C preprocessing proposed in [PR #5921](https://github.com/FreeRADIUS/freeradius-server/pull/5921)
+- prepare the validated C-only FT Adaptive follow-up as a separate pull request after PR #5921 is merged
 
-That preserves the working architecture discovered here while avoiding a Perl dependency for Cisco request parsing.
+The FT follow-up is available in the fork on branch
+[`test/cisco-easypsk-ft-adaptive-20260815`](https://github.com/hshimomura/freeradius-server/tree/test/cisco-easypsk-ft-adaptive-20260815).
+This preserves the working architecture discovered here while avoiding a Perl
+dependency for Cisco request parsing.

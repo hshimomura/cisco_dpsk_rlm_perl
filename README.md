@@ -1,6 +1,14 @@
 # IOS XE EasyPSK helper for FreeRADIUS `rlm_perl`
 
-This repository contains a small `rlm_perl` helper for IOS XE EasyPSK on FreeRADIUS 3.2.x.
+> [!NOTE]
+> **Status: legacy Perl fallback.** This helper remains useful with stock
+> FreeRADIUS 3.2.x installations that do not include native Cisco EasyPSK
+> preprocessing. A binary-safe C implementation has been submitted upstream
+> as [FreeRADIUS PR #5921](https://github.com/FreeRADIUS/freeradius-server/pull/5921)
+> and does not require `rlm_perl`.
+
+This repository contains a small `rlm_perl` helper for non-FT IOS XE EasyPSK
+request normalization on FreeRADIUS 3.2.x.
 
 The current design is intentionally narrow:
 - the Perl helper only normalizes Cisco request attributes into the generic DPSK attributes that `rlm_dpsk` already consumes
@@ -50,7 +58,10 @@ It keeps responsibilities clear:
 - `rlm_dpsk`: generic DPSK matching and generic reply attributes
 - `policy.d/dpsk`: vendor-specific reply formatting
 
-It also aligns with the direction that would make most sense upstream: keep `rlm_dpsk` vendor-neutral and move Cisco-specific request parsing to a preprocessing layer in C later.
+It also aligns with the native design proposed in
+[FreeRADIUS PR #5921](https://github.com/FreeRADIUS/freeradius-server/pull/5921):
+keep `rlm_dpsk` vendor-neutral and perform the binary-safe Cisco-specific
+request parsing in `rlm_preprocess`.
 
 ## Expected FreeRADIUS layout
 
@@ -136,29 +147,43 @@ This means Cisco, Meraki, and Ruckus can all share the same generic DPSK decisio
 
 ## Current recommendation
 
-For current FreeRADIUS 3.2.x work:
+For an unmodified stock FreeRADIUS 3.2.x installation that does not include
+[PR #5921](https://github.com/FreeRADIUS/freeradius-server/pull/5921):
 - use policy to normalize Ruckus and Meraki requests into generic DPSK attributes
-- use this Perl helper only for Cisco request normalization
+- use this Perl helper only as a legacy Cisco request-normalization fallback
 - use `rlm_dpsk` for matching
 - use local policy for vendor-specific replies
+- configure Fast Transition as Disabled when FT-capable stations use this path
 
-For a future upstream-quality IOS XE EasyPSK implementation, the request normalization should likely move from `rlm_perl` into `rlm_preprocess` in C.
+For new custom builds, prefer the binary-safe C implementation from
+[PR #5921](https://github.com/FreeRADIUS/freeradius-server/pull/5921). It moves
+the Cisco-specific request normalization into `rlm_preprocess` and removes the
+runtime dependency on `rlm_perl`.
 
 ## Status of the C implementation
 
-A local C implementation was also validated on FreeRADIUS 3.2.x by decoding IOS XE EasyPSK `Cisco-AVPair` data inside `rlm_preprocess` and writing the decoded results to `Tmp-String-0` and `Tmp-Octets-0..2`. Local policy then mapped those temporary attributes to the generic DPSK request attributes before calling `rlm_dpsk`.
+A C implementation has been validated on FreeRADIUS 3.2.x and submitted
+upstream as [PR #5921](https://github.com/FreeRADIUS/freeradius-server/pull/5921).
+It decodes IOS XE EasyPSK `Cisco-AVPair` data inside `rlm_preprocess` and writes
+the decoded results to `Tmp-String-0` and `Tmp-Octets-0..2`. Local policy then
+maps those temporary attributes to the generic DPSK request attributes before
+calling `rlm_dpsk`.
 
-That design worked in practice and successfully authenticated IOS XE EasyPSK requests without the Perl helper.
+That design successfully authenticated IOS XE EasyPSK requests without the
+Perl helper. PR #5921 is currently open; it covers non-FT PSK handshakes and
+explicitly rejects fragmented FT-PSK input.
 
-However, this repository still documents the Perl-based path as the main reusable approach because:
-- it is easier to carry as a local extension
-- it does not require patching the installed FreeRADIUS package
-- the `rlm_preprocess` C version currently looks more like a local patch than an obvious upstream-ready change for FreeRADIUS 3.2.x
+FT Adaptive support is tracked in
+[issue #5912](https://github.com/FreeRADIUS/freeradius-server/issues/5912).
+A C-only follow-up implementation has been validated in the fork on branch
+[`test/cisco-easypsk-ft-adaptive-20260815`](https://github.com/hshimomura/freeradius-server/tree/test/cisco-easypsk-ft-adaptive-20260815),
+including fragmented EAPOL-Key reassembly and FT-PSK validation. The plan is to
+prepare that work as a separate upstream pull request after PR #5921 is merged.
 
 In short:
-- Perl helper: recommended documented path for current FreeRADIUS 3.2.x deployments
-- C `rlm_preprocess` version: validated local patch, useful for experiments and private builds
-- long-term upstream direction: a cleaner native adapter-style implementation, as seen in the FreeRADIUS v4 design work
+- Perl helper: legacy non-FT fallback for stock FreeRADIUS 3.2.x deployments
+- C `rlm_preprocess` version: preferred implementation proposed in PR #5921
+- FT Adaptive: validated C-only follow-up, to be proposed after PR #5921
 
 ## Additional notes
 
